@@ -28,14 +28,14 @@ public class Protocol {
 
     public void run() throws IOException {
         try {
-            out.println("Welcome to jeopardy type d for print, h for help");
+            out.println("Welcome to ");
             out.flush();
             String cmd = fetchCommand();
             while (!cmd.equals("quit")) {
                 switch (cmd) {
                     case "h":
                     case "help":
-                        out.println("ITS FUCKING JEOPARDY, IF YOU DONT KNOW HOW TO PLAY GOOGLE IT!\nbut 4real, 'd' to draw the board, 'a' to answer. answers are entered as: Catagory Letter, Question, like so: 'B400'");
+                        out.println("aITS FUCKING JEOPARDY, IF YOU DONT KNOW HOW TO PLAY GOOGLE IT!\nbut 4real, 'd' to draw the board, 'a' to answer. answers are entered as: Catagory Letter, Question, like so: 'B400'");
                         break;
                     default:
                         out.println("Unknown command! '" + cmd + "' type help too see all commands");
