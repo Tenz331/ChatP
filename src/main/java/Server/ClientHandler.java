@@ -61,7 +61,6 @@ public class ClientHandler implements Runnable {
                             break;
                     }
                 }
-                //asdadasd
             }
         } catch (IOException e) {
             e.getMessage();
