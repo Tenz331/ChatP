@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Set;
 
 public class ClientHandler implements Runnable {
-    private Set<String> players; //temp player info
     private User clientUserName; //clients - players username
     private final BufferedReader in;
     private final PrintWriter out;
@@ -24,8 +23,7 @@ public class ClientHandler implements Runnable {
     LocalDateTime time;
 
 
-    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients, Set<String> users) throws IOException { //constructor
-        this.players = users;
+    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients) throws IOException { //constructor
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -34,14 +32,14 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() { //thread start for client
         try {
-            out.println("what is your username?:");
+            out.println("What is your username?:");
             String username = in.readLine(); //check if username is allowed / enabled < - >
             if (User.getUsers().contains(username)) {
                 out.println(username + "Username is already taken");
                 run();
             } else {
                 serverBroadCast(username + " joined the server");
-                players.add(username);
+                User.addUser(username);
                 clientUserName = new User(username);
             }
 
@@ -56,7 +54,7 @@ public class ClientHandler implements Runnable {
                 } else if (userInput.startsWith("!")) {
                     switch (userInput.substring(1).toLowerCase()) {
                         case "users":
-                            out.println("Current users: " + getPlayersInLobby().toString());
+                            out.println("Current users: " + User.getUsers());
                             break;
                         default:
                             out.println("Invalid command");
@@ -65,15 +63,13 @@ public class ClientHandler implements Runnable {
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            e.getMessage();
         } finally {
             try {
-                if (User.removeUser(clientUserName.toString())) {
-                    removePlayer(clientUserName.toString());
-                    serverBroadCast(clientUserName + " has left");
-                    getPlayersInLobby();
-                    this.clientUserName = null;
-                }
+                removePlayer(clientUserName.toString());
+                serverBroadCast(clientUserName + " has left");
+                User.getUsers();
+                this.clientUserName = null;
                 out.close();
                 in.close();
             } catch (IOException e) {
@@ -101,13 +97,8 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    public Set<String> getPlayersInLobby() { //gets players on server
-        players = User.getUsers();
-        return players;
-    }
 
     public void removePlayer(String player) { //remove players
-        players.remove(player);
         User.removeUser(player);
     }
 }

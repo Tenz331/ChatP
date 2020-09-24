@@ -12,21 +12,14 @@ public class User {
     }
 
     public static boolean addUser(String user) {
-        if (users.contains(user))
-        {
-            System.out.println("[SERVER] User already in party");
-            return true;
-        }
-        else {
             users.add(user);
-            System.out.println("[SERVER] User ADDED to party");
+            System.out.println("[SERVER] " + user + " joined the server");
             return false;
-        }
     }
     public static boolean removeUser(String user){
         if (users.contains(user)){
             users.remove(user);
-            System.out.println("  [SERVER] removed: "+ user);
+            System.out.println("[SERVER] removed " + user + " from the server");
             return true;
         } else {
             return false;

@@ -55,7 +55,7 @@ public class ServerHandler implements Runnable {
             PrintWriter out = new PrintWriter(client.getOutputStream(), true);
             out.println("Welcome to Team Blue´s SERVER");
             out.println(info.getCanonicalHostName() + " // " + info.getHostName() + " // " + info.getHostAddress() + " // " + PORT + "]"); //useless info delte
-            ClientHandler clientThread = new ClientHandler(client, clientHandlers, User.getUsers());
+            ClientHandler clientThread = new ClientHandler(client, clientHandlers);
             clientHandlers.add(clientThread); //threading add client to thread
             Thread t = new Thread(clientThread);
             t.start();
