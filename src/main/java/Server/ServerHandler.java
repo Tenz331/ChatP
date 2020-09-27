@@ -1,14 +1,12 @@
 package Server;
 
+import Controller.DBConnector;
 import Core.User;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.InetAddress;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Connection;
 import java.util.ArrayList;
 
 public class ServerHandler implements Runnable {
@@ -17,7 +15,7 @@ public class ServerHandler implements Runnable {
     private final BufferedReader in;
     private static final int PORT = 2222;
     private static ArrayList<ClientHandler> clientHandlers = new ArrayList<>(); //client threads
-
+    private static final Connection connection = DBConnector.getInstance().getConnection();
 
     public ServerHandler(Socket socket) throws IOException {
         server = socket;
@@ -46,16 +44,10 @@ public class ServerHandler implements Runnable {
     }
     public static void main(String[] args) throws IOException {
         ServerSocket listener = new ServerSocket(PORT);
-        System.out.println("[SERVER] listeing on port: " + PORT); // starting server
+        System.out.println("[SERVER] listening on port: " + PORT); // starting server
         while (true) {
             Socket client = listener.accept(); //accept client - todo if max treads started add to que
-            InetAddress info;
-            info = client.getInetAddress(); //delete for later just to get some useless ifno
-
-            PrintWriter out = new PrintWriter(client.getOutputStream(), true);
-            out.println("Welcome to Team Blue´s SERVER");
-            out.println(info.getCanonicalHostName() + " // " + info.getHostName() + " // " + info.getHostAddress() + " // " + PORT + "]"); //useless info delte
-            ClientHandler clientThread = new ClientHandler(client, clientHandlers);
+            ClientHandler clientThread = new ClientHandler(client, clientHandlers, User.getUsers());
             clientHandlers.add(clientThread); //threading add client to thread
             Thread t = new Thread(clientThread);
             t.start();
