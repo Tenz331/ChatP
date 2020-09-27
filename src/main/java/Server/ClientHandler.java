@@ -4,7 +4,6 @@ package Server;
 import Controller.DBConnector;
 import Core.User;
 import Util.Encryptor;
-import com.mysql.cj.protocol.Resultset;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -18,17 +17,18 @@ import java.util.ArrayList;
 import java.util.Set;
 
 public class ClientHandler implements Runnable {
-    private Set<String> players; //temp player info
+    private Set<String> users; //temp player info
     private User clientUserName; //clients - players username
     private final BufferedReader in;
     private final PrintWriter out;
-    private final ArrayList<ClientHandler> clients; //todo
+    private final ArrayList<ClientHandler> clients;
     LocalDateTime time;
     Integer user_id;
+    boolean running = true;
     private static final Connection connection = DBConnector.getInstance().getConnection();
 
     public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients, Set<String> users) throws IOException { //constructor
-        this.players = users;
+        this.users = users;
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -37,73 +37,18 @@ public class ClientHandler implements Runnable {
     @Override
     public void run() { //thread start for client
         try {
-            out.println("What is your username?:");
-            String username = in.readLine(); //check if username is allowed / enabled < - >
-            PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
-            loginStmt.setString(1, username);
-            ResultSet rs = loginStmt.executeQuery();
-            if (rs.next()) {
-                if (rs.getString("username").toLowerCase().equals(username.toLowerCase())) {
-                    out.println("User already exists!");
-                    out.println("Enter password to continue");
-                    String password = Encryptor.SHA256(in.readLine());
-                    PreparedStatement passwordStmt = connection.prepareStatement("SELECT password FROM users WHERE username=?");
-                    passwordStmt.setString(1, username);
-                    ResultSet passRs = passwordStmt.executeQuery();
-                    if (passRs.next()) {
-                        String DBPassword = passRs.getString(1);
-                        System.out.println(DBPassword);
-                        System.out.println(password);
-                        if (password.equals(passRs.getString(1))) {
-                            out.println("Login successful");
-                            players.add(username);
-                            clientUserName = new User(username);
-                            user_id = rs.getInt(1);
-                        }
-                        else {
-                            out.println("Wrong password!");
-                            run();
-                        }
-                    }
-                }
-            }
-            else {
-                out.println("Creating new user!");
-                out.println("Enter desired password");
-                String password1 = Encryptor.SHA256(in.readLine());
-                out.println("Enter password again");
-                String password2 = Encryptor.SHA256(in.readLine());
-                if (validatePassword(password1, password2)) {
-                    PreparedStatement newUser = connection.prepareStatement("INSERT INTO users (username, password) VALUES (?, ?)");
-                    newUser.setString(1, username);
-                    newUser.setString(2, password1);
-                    ResultSet newUserRs = newUser.executeQuery();
-                    System.out.println(newUserRs);
-                    out.println("Created new user: " + username);
-
-                }
-            }
-
-
-            /*if (User.getUsers().contains(username)) {
-                out.println(username + "Username is already taken");
-                run();
-            } else {
-                serverBroadCast(username + " joined the server");
-
-            }*/
-
-            while (true) {
+            login();
+            while (running) {
                 String userInput = in.readLine();
                 if (!userInput.startsWith("!")) { //player broadcast msg
                     //Insert message into DB
                     String query = "INSERT INTO ChadChat.log(user_ID, msg) VALUES (?, ?)";
                     PreparedStatement stmt = connection.prepareStatement(query);
-                    stmt.setInt(1, 1);
+                    stmt.setInt(1, user_id);
                     stmt.setString(2, userInput);
                     stmt.execute();
 
-                    //Timestamp for chatwindow
+                    //Timestamp for chat window
                     DateTimeFormatter format = DateTimeFormatter.ofPattern("HH:mm");
                     time = LocalDateTime.now();
                     String timestamp = "[" + format.format(time) + "]";
@@ -113,6 +58,9 @@ public class ClientHandler implements Runnable {
                     switch (userInput.substring(1).toLowerCase()) {
                         case "users":
                             out.println("Current users: " + getPlayersInLobby().toString());
+                            break;
+                        case "quit":
+                            running = false;
                             break;
                         default:
                             out.println("Invalid command");
@@ -130,6 +78,8 @@ public class ClientHandler implements Runnable {
                     getPlayersInLobby();
                     this.clientUserName = null;
                 }
+                //login();
+
                 out.close();
                 in.close();
             } catch (IOException e) {
@@ -144,7 +94,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void playerBroadCast(String timestamp, String substring) { //player - client boradcast
+    private void playerBroadCast(String timestamp, String substring) { //player - client broadcast
         for (ClientHandler clientHandler : clients) {
             if (clientUserName != null) {
                 if (clientHandler.clientUserName != this.clientUserName) {
@@ -158,16 +108,80 @@ public class ClientHandler implements Runnable {
     }
 
     public Set<String> getPlayersInLobby() { //gets players on server
-        players = User.getUsers();
-        return players;
+        users = User.getUsers();
+        return users;
     }
 
     public void removePlayer(String player) { //remove players
-        players.remove(player);
+        users.remove(player);
         User.removeUser(player);
     }
 
     public boolean validatePassword(String password1, String password2) {
         return password1.equals(password2);
     }
+
+    private void login() throws IOException, SQLException {
+        out.println("What is your username?:");
+        String username = in.readLine(); //check if username is allowed / enabled < - >
+        PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
+        loginStmt.setString(1, username);
+        ResultSet rs = loginStmt.executeQuery();
+        if (rs.next()) {
+            user_id = rs.getInt(1);
+            if (rs.getString("username").toLowerCase().equals(username.toLowerCase())) {
+                out.println("User already exists!");
+                out.println("Enter password to continue");
+                String password = Encryptor.SHA256(in.readLine());
+                PreparedStatement passwordStmt = connection.prepareStatement("SELECT password FROM users WHERE username=?");
+                passwordStmt.setString(1, username);
+                ResultSet passRs = passwordStmt.executeQuery();
+                if (passRs.next()) {
+                    if (validatePassword(password, passRs.getString(1))) {
+                        out.println("Login successful");
+                        users.add(rs.getString("username"));
+                        this.clientUserName = new User(rs.getString("username"));
+                        user_id = rs.getInt(1);
+                    }
+                    else {
+                        out.println("Wrong password!");
+                        run();
+                    }
+                }
+            }
+        }
+        else {
+            createNewUser(username);
+        }
+        serverBroadCast(clientUserName + " has joined");
+    }
+    private Integer createNewUser(String username) throws IOException, SQLException {
+        out.println("Creating new user!");
+        out.println("Enter desired password");
+        String password1 = Encryptor.SHA256(in.readLine());
+        out.println("Enter password again");
+        String password2 = Encryptor.SHA256(in.readLine());
+        if (validatePassword(password1, password2)) {
+            PreparedStatement newUser = connection.prepareStatement("INSERT INTO users (username, password) VALUES (?, ?)", Statement.RETURN_GENERATED_KEYS);
+            newUser.setString(1, username);
+            newUser.setString(2, password1);
+            newUser.executeUpdate();
+            try (ResultSet generatedKeys = newUser.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    user_id = generatedKeys.getInt(1);
+                }
+
+            }
+            System.out.println(user_id);
+            out.println("Created new user: " + username);
+            users.add(username);
+            this.clientUserName = new User(username);
+        }
+        else {
+            out.println("Passwords did not match! Try again.");
+            createNewUser(username);
+        }
+        return user_id;
+    }
+
 }

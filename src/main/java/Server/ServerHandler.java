@@ -1,12 +1,9 @@
 package Server;
 
-import Controller.DBConnector;
 import Core.User;
-
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.Connection;
 import java.util.ArrayList;
 
 public class ServerHandler implements Runnable {
@@ -15,7 +12,7 @@ public class ServerHandler implements Runnable {
     private final BufferedReader in;
     private static final int PORT = 2222;
     private static ArrayList<ClientHandler> clientHandlers = new ArrayList<>(); //client threads
-    private static final Connection connection = DBConnector.getInstance().getConnection();
+    //private static final Connection connection = DBConnector.getInstance().getConnection();
 
     public ServerHandler(Socket socket) throws IOException {
         server = socket;

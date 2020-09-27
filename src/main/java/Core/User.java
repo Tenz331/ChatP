@@ -4,11 +4,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class User {
-    public final String id;
+    public final String username;
     private static Set<String> users = new HashSet<>(); //players / clients on server
 
-    public User(String id) {
-        this.id = id;
+    public User(String username) {
+        this.username = username;
     }
 
     public static boolean addUser(String user) {
@@ -38,6 +38,6 @@ public class User {
 
     @Override
     public String toString() {
-        return this.id;
+        return this.username;
     }
 }
