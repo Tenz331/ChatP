@@ -2,7 +2,6 @@ package Server;
 
 
 import Controller.DBConnector;
-import Core.User;
 import Util.Encryptor;
 
 import java.io.BufferedReader;
@@ -14,21 +13,23 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Set;
 
 public class ClientHandler implements Runnable {
-    private Set<String> users; //temp player info
-    private User clientUserName; //clients - players username
-    private final BufferedReader in;
-    private final PrintWriter out;
-    private final ArrayList<ClientHandler> clients;
+    public static ArrayList<String> users = new ArrayList<>(); //temp player info
+    private String clientUserName; //clients - players username
+    private BufferedReader in;
+    private PrintWriter out;
+    private ArrayList<ClientHandler> clients;
     LocalDateTime time;
     Integer user_id;
     boolean running = true;
     private static final Connection connection = DBConnector.getInstance().getConnection();
 
-    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients, Set<String> users) throws IOException { //constructor
-        this.users = users;
+    public ClientHandler() {
+    }
+
+    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients, ArrayList<String> users) throws IOException { //constructor
+        ClientHandler.users = users;
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -57,7 +58,7 @@ public class ClientHandler implements Runnable {
                 } else if (userInput.startsWith("!")) {
                     switch (userInput.substring(1).toLowerCase()) {
                         case "users":
-                            out.println("Current users: " + getPlayersInLobby().toString());
+                            out.println("Current users: " + getUsersInLobby().toString());
                             break;
                         case "quit":
                             running = false;
@@ -72,10 +73,8 @@ public class ClientHandler implements Runnable {
             e.printStackTrace();
         } finally {
             try {
-                if (User.removeUser(clientUserName.toString())) {
-                    removePlayer(clientUserName.toString());
-                    serverBroadCast(clientUserName + " has left");
-                    getPlayersInLobby();
+                if (removeUser(this.clientUserName)) {
+                    serverBroadCast(this.clientUserName + " has left");
                     this.clientUserName = null;
                 }
                 //login();
@@ -97,7 +96,7 @@ public class ClientHandler implements Runnable {
     private void playerBroadCast(String timestamp, String substring) { //player - client broadcast
         for (ClientHandler clientHandler : clients) {
             if (clientUserName != null) {
-                if (clientHandler.clientUserName != this.clientUserName) {
+                if (!clientHandler.clientUserName.equals(this.clientUserName)) {
                     clientHandler.out.println(timestamp + clientUserName + ": " + substring);
                 }
                 else {
@@ -107,14 +106,18 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    public Set<String> getPlayersInLobby() { //gets players on server
-        users = User.getUsers();
+    public static ArrayList<String> getUsersInLobby() { //gets players on server;
         return users;
     }
 
-    public void removePlayer(String player) { //remove players
-        users.remove(player);
-        User.removeUser(player);
+    public boolean removeUser(String user) { //remove players
+        if (users.contains(user)){
+            users.remove(user);
+            System.out.println("[SERVER] removed: "+ user);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public boolean validatePassword(String password1, String password2) {
@@ -139,13 +142,14 @@ public class ClientHandler implements Runnable {
                 if (passRs.next()) {
                     if (validatePassword(password, passRs.getString(1))) {
                         out.println("Login successful");
-                        users.add(rs.getString("username"));
-                        this.clientUserName = new User(rs.getString("username"));
+                        users.add(username);
+                        this.clientUserName = rs.getString("username");
                         user_id = rs.getInt(1);
                     }
                     else {
                         out.println("Wrong password!");
-                        run();
+                        out.println();
+                        login();
                     }
                 }
             }
@@ -155,7 +159,7 @@ public class ClientHandler implements Runnable {
         }
         serverBroadCast(clientUserName + " has joined");
     }
-    private Integer createNewUser(String username) throws IOException, SQLException {
+    private void createNewUser(String username) throws IOException, SQLException {
         out.println("Creating new user!");
         out.println("Enter desired password");
         String password1 = Encryptor.SHA256(in.readLine());
@@ -170,18 +174,15 @@ public class ClientHandler implements Runnable {
                 if (generatedKeys.next()) {
                     user_id = generatedKeys.getInt(1);
                 }
-
             }
             System.out.println(user_id);
             out.println("Created new user: " + username);
             users.add(username);
-            this.clientUserName = new User(username);
+            this.clientUserName = username;
         }
         else {
             out.println("Passwords did not match! Try again.");
             createNewUser(username);
         }
-        return user_id;
     }
-
 }
