@@ -15,21 +15,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
 public class ClientHandler implements Runnable {
-    public static ArrayList<String> users = new ArrayList<>(); //temp player info
+    public static ArrayList<String> users; //temp player info
     private String clientUserName; //clients - players username
-    private BufferedReader in;
-    private PrintWriter out;
-    private ArrayList<ClientHandler> clients;
+    private final BufferedReader in;
+    private final PrintWriter out;
+    private final ArrayList<ClientHandler> clients;
     LocalDateTime time;
     Integer user_id;
     boolean running = true;
     private static final Connection connection = DBConnector.getInstance().getConnection();
 
-    public ClientHandler() {
-    }
-
-    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients, ArrayList<String> users) throws IOException { //constructor
-        ClientHandler.users = users;
+    public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients) throws IOException { //constructor
+        users = new ArrayList<>();
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -61,7 +58,8 @@ public class ClientHandler implements Runnable {
                             out.println("Current users: " + getUsersInLobby().toString());
                             break;
                         case "quit":
-                            running = false;
+                            removeUser(clientUserName);
+                            run();
                             break;
                         default:
                             out.println("Invalid command");
@@ -76,9 +74,8 @@ public class ClientHandler implements Runnable {
                 if (removeUser(this.clientUserName)) {
                     serverBroadCast(this.clientUserName + " has left");
                     this.clientUserName = null;
+                    running = false;
                 }
-                //login();
-
                 out.close();
                 in.close();
             } catch (IOException e) {
@@ -142,7 +139,7 @@ public class ClientHandler implements Runnable {
                 if (passRs.next()) {
                     if (validatePassword(password, passRs.getString(1))) {
                         out.println("Login successful");
-                        users.add(username);
+                        users.add(rs.getString("username"));
                         this.clientUserName = rs.getString("username");
                         user_id = rs.getInt(1);
                     }
@@ -158,6 +155,7 @@ public class ClientHandler implements Runnable {
             createNewUser(username);
         }
         serverBroadCast(clientUserName + " has joined");
+        running = true;
     }
     private void createNewUser(String username) throws IOException, SQLException {
         out.println("Creating new user!");
