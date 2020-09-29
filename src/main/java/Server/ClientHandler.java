@@ -93,7 +93,6 @@ public class ClientHandler implements Runnable {
 
     private void playerBroadCast(String timestamp, String substring) { //player - client broadcast
         for (ClientHandler clientHandler : clients) {
-            if (clientUserName != null) {
                 if (!Objects.equals(clientHandler.clientUserName,this.clientUserName)) {
                     clientHandler.out.println(timestamp + clientUserName + ": " + substring);
                 }
@@ -102,7 +101,6 @@ public class ClientHandler implements Runnable {
                 }
             }
         }
-    }
 
     public static ArrayList<String> getUsersInLobby() { //gets players on server;
         return users;
