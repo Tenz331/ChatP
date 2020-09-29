@@ -13,6 +13,7 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class ClientHandler implements Runnable {
     public static ArrayList<String> users; //temp player info
@@ -93,7 +94,7 @@ public class ClientHandler implements Runnable {
     private void playerBroadCast(String timestamp, String substring) { //player - client broadcast
         for (ClientHandler clientHandler : clients) {
             if (clientUserName != null) {
-                if (!clientHandler.clientUserName.equals(this.clientUserName)) {
+                if (!Objects.equals(clientHandler.clientUserName,this.clientUserName)) {
                     clientHandler.out.println(timestamp + clientUserName + ": " + substring);
                 }
                 else {
