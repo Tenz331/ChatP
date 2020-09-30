@@ -23,7 +23,8 @@ public class ClientHandler implements Runnable {
     private final ArrayList<ClientHandler> clients;
     LocalDateTime time;
     Integer user_id;
-    boolean running = true;
+    boolean running = false;
+    private int channel_id;
     private static final Connection connection = DBConnector.getInstance().getConnection();
 
     public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients) throws IOException { //constructor
@@ -37,30 +38,40 @@ public class ClientHandler implements Runnable {
     public void run() { //thread start for client
         try {
             login();
+            joinChannel("main");
             while (running) {
                 String userInput = in.readLine();
                 if (!userInput.startsWith("!")) { //player broadcast msg
                     //Insert message into DB
-                    String query = "INSERT INTO ChadChat.log(user_ID, msg) VALUES (?, ?)";
-                    PreparedStatement stmt = connection.prepareStatement(query);
+                    String insertMsgQuery = "INSERT INTO ChadChat.log(user_ID, msg, channel_id) VALUES (?, ?, ?)";
+                    PreparedStatement stmt = connection.prepareStatement(insertMsgQuery);
                     stmt.setInt(1, user_id);
                     stmt.setString(2, userInput);
+                    stmt.setInt(3, channel_id);
                     stmt.execute();
 
                     //Timestamp for chat window
                     DateTimeFormatter format = DateTimeFormatter.ofPattern("HH:mm");
                     time = LocalDateTime.now();
                     String timestamp = "[" + format.format(time) + "]";
-                    playerBroadCast(timestamp, userInput);
+                    userBroadCast(timestamp, userInput, channel_id);
 
                 } else if (userInput.startsWith("!")) {
-                    switch (userInput.substring(1).toLowerCase()) {
+                    String[] userCommand = userInput.split(" ");
+                    switch (userCommand[0].toLowerCase().substring(1)) {
                         case "users":
                             out.println("Current users: " + getUsersInLobby().toString());
                             break;
                         case "quit":
                             removeUser(clientUserName);
                             run();
+                            break;
+                        case "join":
+                            serverBroadCast(clientUserName + " has left the channel");
+                            joinChannel(userCommand[1]);
+                            break;
+                        case "channel":
+                            out.println(channel_id);
                             break;
                         default:
                             out.println("Invalid command");
@@ -85,22 +96,28 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
     private void serverBroadCast(String substring) { //server broadcast
         for (ClientHandler clientHandler : clients) {
-            clientHandler.out.println("[SERVER] " + substring);
+            if (Objects.equals(clientHandler.channel_id, this.channel_id)) {
+                if (!Objects.equals(clientHandler.clientUserName, this.clientUserName)) {
+                    clientHandler.out.println("[SERVER] " + substring);
+                }
+            }
         }
     }
 
-    private void playerBroadCast(String timestamp, String substring) { //player - client broadcast
+    private void userBroadCast(String timestamp, String substring, int channelID) { //player - client broadcast
         for (ClientHandler clientHandler : clients) {
-                if (!Objects.equals(clientHandler.clientUserName,this.clientUserName)) {
+            if (Objects.equals(clientHandler.channel_id, channelID)) {
+                if (!Objects.equals(clientHandler.clientUserName, this.clientUserName)) {
                     clientHandler.out.println(timestamp + clientUserName + ": " + substring);
-                }
-                else {
+                } else {
                     clientHandler.out.println(timestamp + "You: " + substring);
                 }
             }
         }
+    }
 
     public static ArrayList<String> getUsersInLobby() { //gets players on server;
         return users;
@@ -122,38 +139,42 @@ public class ClientHandler implements Runnable {
 
     private void login() throws IOException, SQLException {
         out.println("What is your username?:");
-        String username = in.readLine(); //check if username is allowed / enabled < - >
-        PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
-        loginStmt.setString(1, username);
-        ResultSet rs = loginStmt.executeQuery();
-        if (rs.next()) {
-            user_id = rs.getInt(1);
-            if (rs.getString("username").toLowerCase().equals(username.toLowerCase())) {
-                out.println("User already exists!");
-                out.println("Enter password to continue");
-                String password = Encryptor.SHA256(in.readLine());
-                PreparedStatement passwordStmt = connection.prepareStatement("SELECT password FROM users WHERE username=?");
-                passwordStmt.setString(1, username);
-                ResultSet passRs = passwordStmt.executeQuery();
-                if (passRs.next()) {
-                    if (validatePassword(password, passRs.getString(1))) {
-                        out.println("Login successful");
-                        users.add(rs.getString("username"));
-                        this.clientUserName = rs.getString("username");
-                        user_id = rs.getInt(1);
-                    }
-                    else {
-                        out.println("Wrong password!");
-                        out.println();
-                        login();
+        String username = in.readLine();
+        if (!users.stream().anyMatch(username::equalsIgnoreCase)) {//check if username is allowed / enabled < - >
+            PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
+            loginStmt.setString(1, username);
+            ResultSet rs = loginStmt.executeQuery();
+            if (rs.next()) {
+                user_id = rs.getInt(1);
+                if (rs.getString("username").toLowerCase().equals(username.toLowerCase())) {
+                    out.println("User already exists!");
+                    out.println("Enter password to continue");
+                    String password = Encryptor.SHA256(in.readLine());
+                    PreparedStatement passwordStmt = connection.prepareStatement("SELECT password FROM users WHERE username=?");
+                    passwordStmt.setString(1, username);
+                    ResultSet passRs = passwordStmt.executeQuery();
+                    if (passRs.next()) {
+                        if (validatePassword(password, passRs.getString(1))) {
+                            out.println("Login successful");
+                            users.add(rs.getString("username"));
+                            this.clientUserName = rs.getString("username");
+                            user_id = rs.getInt(1);
+                            channel_id = 1;
+                        } else {
+                            out.println("Wrong password!");
+                            out.println();
+                            login();
+                        }
                     }
                 }
+            } else {
+                createNewUser(username);
             }
         }
         else {
-            createNewUser(username);
+            out.println("User is already logged in!");
+            login();
         }
-        serverBroadCast(clientUserName + " has joined");
         running = true;
     }
     private void createNewUser(String username) throws IOException, SQLException {
@@ -176,10 +197,53 @@ public class ClientHandler implements Runnable {
             out.println("Created new user: " + username);
             users.add(username);
             this.clientUserName = username;
+            channel_id = 1;
         }
         else {
             out.println("Passwords did not match! Try again.");
             createNewUser(username);
         }
+    }
+
+    public void getLastLogEntries(int channelID) {
+        //Gets last 10 entries in the channel
+        String joinChannelQuery = "SELECT * FROM (SELECT log.entry_id, users.username, log.timestamp, log.msg, log.channel_id " +
+                "FROM log INNER JOIN users ON log.user_ID = users.ID " +
+                "WHERE channel_id = " + channelID + " ORDER BY entry_ID DESC LIMIT 10)" +
+                "sub1 ORDER BY entry_ID ASC;";
+                ;
+        try {
+            Statement joinChannelStmt = connection.createStatement();
+            ResultSet logRs = joinChannelStmt.executeQuery(joinChannelQuery);
+            while (logRs.next()) {
+                String username = logRs.getString(2);
+                String timestamp = logRs.getString(3).substring(0, 16);
+                String message = logRs.getNString(4);
+                if (username.equals(this.clientUserName)) {
+                    username = "You";
+                }
+                out.println("[" + timestamp + "] " + username + ": " + message);
+            }
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+    }
+
+    private void joinChannel(String channelName) {
+        String getChannelIDQuery = "SELECT * FROM channel WHERE name = '" + channelName + "'";
+        try {
+            Statement channelIDStmt = connection.createStatement();
+            ResultSet channelIDRs = channelIDStmt.executeQuery(getChannelIDQuery);
+            while (channelIDRs.next()) {
+                channel_id = channelIDRs.getInt(1);
+            }
+
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+        out.println("[SERVER] Joined channel: " + channelName);
+        serverBroadCast(clientUserName + " joined the channel");
+        getLastLogEntries(channel_id);
+        System.out.println("\033[0;1m" + this.clientUserName + " joined: " + channel_id);
     }
 }
