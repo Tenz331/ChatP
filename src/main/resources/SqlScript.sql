@@ -1,4 +1,7 @@
+DROP DATABASE ChadChat;
+CREATE DATABASE ChadChat;
 use ChadChat;
+SET GLOBAL max_allowed_packet = 1024 * 1024 * 1024;
 SET FOREIGN_KEY_CHECKS=0;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS log;
@@ -19,3 +22,7 @@ msg VARCHAR(255) NOT NULL,
 PRIMARY KEY(entry_ID),
 FOREIGN KEY (user_ID) REFERENCES users(ID)
 );  
+
+INSERT INTO users (username, password) VALUES ("Hvid", SHA2(" ", 256));
+
+#SELECT log.entry_id, users.username, log.timestamp, log.msg FROM log INNER JOIN users ON log.user_ID = users.ID;
