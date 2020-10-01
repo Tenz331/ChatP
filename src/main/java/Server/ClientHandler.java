@@ -12,10 +12,10 @@ import java.net.Socket;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Objects;
+import java.util.*;
 
 public class ClientHandler implements Runnable {
+    public HashMap<Integer, List<String>> channelOccupancy;
     public static ArrayList<String> users; //temp player info
     private String clientUserName; //clients - players username
     private final BufferedReader in;
@@ -29,6 +29,7 @@ public class ClientHandler implements Runnable {
 
     public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients) throws IOException { //constructor
         users = new ArrayList<>();
+        channelOccupancy = new HashMap();
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -60,6 +61,11 @@ public class ClientHandler implements Runnable {
                     String[] userCommand = userInput.split(" ");
                     switch (userCommand[0].toLowerCase().substring(1)) {
                         case "users":
+                            for (int i : channelOccupancy.keySet()) {
+                                for (String s : channelOccupancy.get(i)) {
+                                    System.out.println(s);
+                                }
+                            }
                             out.println("Current users: " + getUsersInLobby().toString());
                             break;
                         case "quit":
@@ -68,10 +74,10 @@ public class ClientHandler implements Runnable {
                             break;
                         case "join":
                             serverBroadCast(clientUserName + " has left the channel");
-                            joinChannel(userCommand[1]);
+                            joinChannel(userCommand[1].toLowerCase());
                             break;
-                        case "channel":
-                            out.println(channel_id);
+                        case "channels":
+                            out.println("Available channels: " + getChannelNames().toString());
                             break;
                         default:
                             out.println("Invalid command");
@@ -94,6 +100,22 @@ public class ClientHandler implements Runnable {
                 e.printStackTrace();
             }
         }
+    }
+
+    private ArrayList<String> getChannelNames() {
+        ArrayList<String> channelNames = new ArrayList<>();
+        String getChannelNameQuery = "SELECT name FROM channel";
+        try {
+            Statement channelNameStmt = connection.createStatement();
+            ResultSet channelNameRS = channelNameStmt.executeQuery(getChannelNameQuery);
+                while (channelNameRS.next()) {
+                    String channelName = channelNameRS.getString(1);
+                    channelNames.add(channelName.substring(0,1).toUpperCase() + channelName.substring(1));
+                }
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+        }
+        return channelNames;
     }
 
 
@@ -140,7 +162,7 @@ public class ClientHandler implements Runnable {
     private void login() throws IOException, SQLException {
         out.println("What is your username?:");
         String username = in.readLine();
-        if (!users.stream().anyMatch(username::equalsIgnoreCase)) {//check if username is allowed / enabled < - >
+        if (users.stream().noneMatch(username::equalsIgnoreCase)) {//check if username is allowed / enabled < - >
             PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
             loginStmt.setString(1, username);
             ResultSet rs = loginStmt.executeQuery();
@@ -160,6 +182,7 @@ public class ClientHandler implements Runnable {
                             this.clientUserName = rs.getString("username");
                             user_id = rs.getInt(1);
                             channel_id = 1;
+                            addToList(channel_id, this.clientUserName);
                         } else {
                             out.println("Wrong password!");
                             out.println();
@@ -211,7 +234,6 @@ public class ClientHandler implements Runnable {
                 "FROM log INNER JOIN users ON log.user_ID = users.ID " +
                 "WHERE channel_id = " + channelID + " ORDER BY entry_ID DESC LIMIT 10)" +
                 "sub1 ORDER BY entry_ID ASC;";
-                ;
         try {
             Statement joinChannelStmt = connection.createStatement();
             ResultSet logRs = joinChannelStmt.executeQuery(joinChannelQuery);
@@ -232,18 +254,31 @@ public class ClientHandler implements Runnable {
     private void joinChannel(String channelName) {
         String getChannelIDQuery = "SELECT * FROM channel WHERE name = '" + channelName + "'";
         try {
+            channelOccupancy.get(channel_id).remove(this.clientUserName);
             Statement channelIDStmt = connection.createStatement();
             ResultSet channelIDRs = channelIDStmt.executeQuery(getChannelIDQuery);
             while (channelIDRs.next()) {
                 channel_id = channelIDRs.getInt(1);
             }
-
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         }
-        out.println("[SERVER] Joined channel: " + channelName);
+        addToList(channel_id, this.clientUserName);
+        out.println("[SERVER] Joined channel: " + channelName.substring(0,1).toUpperCase() + channelName.substring(1));
         serverBroadCast(clientUserName + " joined the channel");
         getLastLogEntries(channel_id);
         System.out.println("\033[0;1m" + this.clientUserName + " joined: " + channel_id);
+    }
+
+    private synchronized void addToList(int channelID, String clientUserName) {
+        List<String> usernames = channelOccupancy.get(channelID);
+        if (usernames == null) {
+            usernames = new ArrayList<>();
+            usernames.add(this.clientUserName);
+            channelOccupancy.put(channelID, usernames);
+        }
+        else {
+            if (!usernames.contains(this.clientUserName)) usernames.add(clientUserName);
+        }
     }
 }
