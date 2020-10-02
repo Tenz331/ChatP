@@ -29,7 +29,7 @@ public class ClientHandler implements Runnable {
 
     public ClientHandler(Socket ClientSocket, ArrayList<ClientHandler> clients) throws IOException { //constructor
         users = new ArrayList<>();
-        channelOccupancy = new HashMap();
+        channelOccupancy = new HashMap<>();
         this.clients = clients;
         in = new BufferedReader((new InputStreamReader(ClientSocket.getInputStream())));
         out = new PrintWriter(ClientSocket.getOutputStream(), true);
@@ -61,12 +61,8 @@ public class ClientHandler implements Runnable {
                     String[] userCommand = userInput.split(" ");
                     switch (userCommand[0].toLowerCase().substring(1)) {
                         case "users":
-                            for (int i : channelOccupancy.keySet()) {
-                                for (String s : channelOccupancy.get(i)) {
-                                    System.out.println(s);
-                                }
-                            }
                             out.println("Current users: " + getUsersInLobby().toString());
+                            System.out.println(channelOccupancy.get(channel_id).toString());
                             break;
                         case "quit":
                             removeUser(clientUserName);
@@ -118,7 +114,6 @@ public class ClientHandler implements Runnable {
         return channelNames;
     }
 
-
     private void serverBroadCast(String substring) { //server broadcast
         for (ClientHandler clientHandler : clients) {
             if (Objects.equals(clientHandler.channel_id, this.channel_id)) {
@@ -141,11 +136,11 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    public static ArrayList<String> getUsersInLobby() { //gets players on server;
+    public static ArrayList<String> getUsersInLobby() { //gets users on server;
         return users;
     }
 
-    public boolean removeUser(String user) { //remove players
+    public boolean removeUser(String user) { //remove user from server
         if (users.contains(user)){
             users.remove(user);
             System.out.println("[SERVER] removed: "+ user);
@@ -162,7 +157,7 @@ public class ClientHandler implements Runnable {
     private void login() throws IOException, SQLException {
         out.println("What is your username?:");
         String username = in.readLine();
-        if (users.stream().noneMatch(username::equalsIgnoreCase)) {//check if username is allowed / enabled < - >
+        if (users.stream().noneMatch(username::equalsIgnoreCase)) { //check if username is allowed / enabled < - >
             PreparedStatement loginStmt = connection.prepareStatement("SELECT id, username FROM users WHERE username=?");
             loginStmt.setString(1, username);
             ResultSet rs = loginStmt.executeQuery();
@@ -221,6 +216,7 @@ public class ClientHandler implements Runnable {
             users.add(username);
             this.clientUserName = username;
             channel_id = 1;
+            addToList(channel_id, username);
         }
         else {
             out.println("Passwords did not match! Try again.");
@@ -252,33 +248,49 @@ public class ClientHandler implements Runnable {
     }
 
     private void joinChannel(String channelName) {
-        String getChannelIDQuery = "SELECT * FROM channel WHERE name = '" + channelName + "'";
         try {
+            PreparedStatement channelIDStmt = connection.prepareStatement("SELECT * FROM channel WHERE name = '" + channelName + "'", Statement.RETURN_GENERATED_KEYS);
             channelOccupancy.get(channel_id).remove(this.clientUserName);
-            Statement channelIDStmt = connection.createStatement();
-            ResultSet channelIDRs = channelIDStmt.executeQuery(getChannelIDQuery);
-            while (channelIDRs.next()) {
-                channel_id = channelIDRs.getInt(1);
-            }
+            ResultSet channelIDRs = channelIDStmt.executeQuery();
+                if (channelIDRs.next()) {
+                    channel_id = channelIDRs.getInt(1);
+                }
+                else {
+                    PreparedStatement createNewChannelStmt = connection.prepareStatement("INSERT INTO channel (name) VALUES (?)", Statement.RETURN_GENERATED_KEYS);
+                    createNewChannelStmt.setString(1, channelName);
+                    createNewChannelStmt.executeUpdate();
+                    try (ResultSet newChannelRs = createNewChannelStmt.getGeneratedKeys()) {
+                        if (newChannelRs.next()) {
+                            channel_id = newChannelRs.getInt(1);
+                        }
+                    }
+                }
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         }
         addToList(channel_id, this.clientUserName);
-        out.println("[SERVER] Joined channel: " + channelName.substring(0,1).toUpperCase() + channelName.substring(1));
+        out.println("[SERVER] Joined channel: " + channelName.substring(0, 1).toUpperCase() + channelName.substring(1));
         serverBroadCast(clientUserName + " joined the channel");
         getLastLogEntries(channel_id);
-        System.out.println("\033[0;1m" + this.clientUserName + " joined: " + channel_id);
+        System.out.println(this.clientUserName + " joined: " + channel_id);
     }
 
-    private synchronized void addToList(int channelID, String clientUserName) {
-        List<String> usernames = channelOccupancy.get(channelID);
-        if (usernames == null) {
-            usernames = new ArrayList<>();
-            usernames.add(this.clientUserName);
-            channelOccupancy.put(channelID, usernames);
+    private synchronized void addToList(int channelID, String userName) {
+        if (channelOccupancy.containsKey(channelID)) {
+            List<String> usernames = channelOccupancy.get(channelID);
+            if (usernames == null) {
+                usernames = new ArrayList<>();
+                usernames.add(userName);
+                channelOccupancy.put(channelID, usernames);
+            }
+            else {
+                if (!usernames.contains(this.clientUserName)) usernames.add(userName);
+            }
         }
         else {
-            if (!usernames.contains(this.clientUserName)) usernames.add(clientUserName);
+            List<String> usernames = new ArrayList<>();
+            usernames.add(userName);
+            channelOccupancy.put(channelID, usernames);
         }
     }
 }

@@ -1,20 +1,15 @@
 package Server;
 
-import Controller.DBConnector;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 
 public class ServerHandler implements Runnable {
     private final BufferedReader in;
     private static final int PORT = 2222;
     private static final ArrayList<ClientHandler> clientHandlers = new ArrayList<>(); //client threads
-    private static final Connection connection = DBConnector.getInstance().getConnection();
 
     public ServerHandler(Socket socket) throws IOException {
         in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -41,7 +36,7 @@ public class ServerHandler implements Runnable {
             }
         }
     }
-    public static void main(String[] args) throws IOException, SQLException {
+    public static void main(String[] args) throws IOException{
         ServerSocket listener = new ServerSocket(PORT);
         System.out.println("[SERVER] listening on port: " + PORT); // starting server
         while (true) {
